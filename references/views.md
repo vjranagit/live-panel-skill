@@ -190,9 +190,10 @@ Fonts: body text uses `TH.font` (CSS var `--font`). Titles/big numbers may use `
     default of `dashed` (`no` / `back` dashed, the rest solid) and the label wording; **the final
     `dashed` flag alone decides what a loop-back is**: dim colour, `warn` lit colour with flowing
     dashes, and no ambient flow. `lane:"left"|"right"` sends the edge through a gutter reserved
-    at that side (long loop-backs). Every edge has one resident green dot (radius ~0.55u) in the
+    at that side (long loop-backs). With `motion:"walk"` every edge has one resident green dot (radius ~0.55u) in the
     middle of its longest straight stretch, kept >= 1.5u from the arrowhead and from labels;
-    solid edges long enough carry smaller, fainter ambient dots (~1.15 s, divides `period`).
+    solid edges long enough carry smaller, fainter dots (~1.15 s, divides `period`); in ambient
+    mode packets replace both.
     Labels of decision edges sit beside the source diamond's vertex; others take the first free
     spot (clear of nodes, other edges, frame borders, titles, dots). Group titles sit in the
     stretch of their strip that no vertical edge crosses.
@@ -206,6 +207,31 @@ Fonts: body text uses `TH.font` (CSS var `--font`). Titles/big numbers may use `
     `entry:"trigger"`: during the closing hop of each round (back to the first node) a second,
     smaller token rides `entry → first node` and the entry card glows weakly. Loop-backs that no
     round walks simply stay dim, so give each decision loop a round of its own.
+  - motion: `motion` is `"ambient"` (default) | `"walk"` | `"ambient+walk"`; `ambientPeriod`
+    (default 2.5 s) is the ambient lap. Ambient makes the whole graph move at once: every forward edge
+    carries green packets (small tail, glow on dark) at one px/s speed, spaced so the lap closes
+    within `ambientPeriod`; every dashed loop-back marches its dashes forward (2 dash cycles per
+    lap, dim colour, no flicker); each icon has its own small motion (below); cards and group
+    frames stay still. The resident middle dot is dropped (the packets replace it). With a walk,
+    `period` must be a whole multiple of `ambientPeriod` (`check()` reports it) and the focus is
+    quieter: outline 1.5x (no glow), token 0.8x. `verify_view.py` demands `canvas.duration` to be a
+    whole multiple of `ambientPeriod` (pure ambient) or `period` (walk on).
+    Status card (`status`): in pure ambient the big line is `status.ambientTitle`, the small line
+    `status.ambientSub`, and the dot row is a chase (one dot every `ambientPeriod / dots`); with a
+    walk it shows round / step as before.
+  - icon motion (ambient only, phase staggered by node order, one lap per `ambientPeriod`):
+
+    | icon | motion |
+    |---|---|
+    | message-square (drawn as Lucide `message-square-more`) | three dots hop in turn |
+    | eye | one blink per lap (scaleY 1 -> 0.15 -> 1, closed briefly) |
+    | ticket | wiggle +-6 deg |
+    | bug | sway +-5 deg |
+    | git-pull-request, git-merge | float +-1.5 px vertically |
+    | shield-check | breathe, scale 1 -> 1.08 |
+    | timer | hand ticks round the dial in 8 steps |
+    | refresh-cw | one full turn per lap |
+    | others (info, bot, bell, hand, circle) | breathe, scale 1 -> 1.05 |
   - every marked node (text, edges, boxes) has a static style; focus, lit edges, tokens, dots and
     glow are separate unmarked elements whose opacity is the only thing `seek` changes.
 - **kpi**: `cards:[{label,value,unit?,delta?,series:[numbers],status?}]`, grid auto-chosen by count

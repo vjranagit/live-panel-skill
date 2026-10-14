@@ -5,7 +5,7 @@
  },
  "canvas": {
   "preset": "4:5",
-  "duration": 50,
+  "duration": 20,
   "fps": 30
  },
  "theme": {
@@ -33,7 +33,9 @@
    "status": {
     "node": "status",
     "round": "第 {n} 轮 · iteration",
-    "step": "当前步骤 · {label}"
+    "step": "当前步骤 · {label}",
+    "ambientTitle": "每日 Loop · 一直在转",
+    "ambientSub": "外环 Grok Bot · 内环 Cursor · 人在最后拍板"
    },
    "groups": [
     {
@@ -365,7 +367,9 @@
      "output",
      "watch"
     ]
-   ]
+   ],
+   "motion": "ambient",
+   "ambientPeriod": 2.5
   }
  ]
 }

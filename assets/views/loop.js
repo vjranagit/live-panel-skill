@@ -6,6 +6,7 @@
 
   // Lucide icon bodies (24x24 viewBox, stroke currentColor); unknown names fall back to 'circle'
   var ICONS = {
+    'message-square-more': '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /><path d="M12 11h.01" /><path d="M16 11h.01" /><path d="M8 11h.01" />',
     'message-square': '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" />',
     'eye': '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" />',
     'ticket': '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /><path d="M13 5v2" /><path d="M13 17v2" /><path d="M13 11v2" />',
@@ -97,16 +98,22 @@
     {isz:3.5, tS:1.4,  dS:1.1,  padV:0.7,  maxDesc:3},
     {isz:3.2, tS:1.35, dS:1.05, padV:0.55, maxDesc:2}
   ];
+  var ICON_ALIAS = {'message-square':'message-square-more'};   // the chat bubble always carries its three dots
   var FOCUS_AT = 0.7;                // fraction of a hop at which the focus passes from source to target
 
   LP.registerView('loop', {
     build: function(ctx){
       var e = ctx.e, rect = ctx.rect, root = ctx.root;
       var w = rect.w, h = rect.h, dark = ctx.dark;
+      var problems = [];
       var u = Math.min(w, h)/100;
       var period = Number(e.period) || 26;
+      var motion = e.motion || 'ambient';
+      var amb = motion.indexOf('ambient') >= 0, walkOn = motion.indexOf('walk') >= 0;
+      var weak = amb && walkOn;                       // walk laid over ambient: quieter focus
+      var AP = Number(e.ambientPeriod) || 2.5;
+      if(!amb && !walkOn){ problems.push('motion "'+motion+'" is not ambient | walk | ambient+walk'); }
       var HUE = dark ? HUE_DARK : HUE_LIGHT;
-      var problems = [];
       var ff = e.font === 'theme' ? null : SANS;
       var ffCss = ff ? 'font-family:' + ff + ';' : '';
 
@@ -210,17 +217,22 @@
       var walkSpec = (e.walks || (e.walk ? [e.walk] : [])).map(function(a){ return (a||[]).slice(); });
       var maxVisit = walkSpec.reduce(function(m, a){ return Math.max(m, a.length); }, 1);
       var rounds = Math.max(1, walkSpec.length);
+      var ambientOnly = amb && !walkOn;
+      var ambSub = (statusCfg && statusCfg.ambientSub) || '';
+      var dotCount = ambientOnly ? (maxVisit > 1 ? maxVisit : 8) : maxVisit;
       function statusPlan(P, L){
         var n = P.n, tw = P.tw;
         var rTpl = statusCfg.round || 'Round {n}', sTpl = statusCfg.step || '{label}';
         var rS = clamp(u*2.5, 16, 32), rSize = rS;
         var rStr = []; for(var q = 1; q <= rounds; q++) rStr.push(rTpl.replace('{n}', q));
+        if(ambientOnly){ rStr = [statusCfg.ambientTitle || 'Loop']; sTpl = ambSub; }
         rStr.forEach(function(s){ rSize = Math.min(rSize, ctx.fit(s, rS, tw, 'var(--font-title)', 12, true).size); });
         var sSize = Math.max(11, Math.round(P.dS));
-        walkSpec.forEach(function(a){ a.forEach(function(id){
+        if(ambientOnly) sSize = Math.min(sSize, ctx.fit(ambSub, sSize, tw, ff, 11, false).size);
+        else walkSpec.forEach(function(a){ a.forEach(function(id){
           if(byId[id]) sSize = Math.min(sSize, ctx.fit(sTpl.replace('{label}', byId[id].label), sSize, tw, ff, 11, false).size);
         }); });
-        var dotGap = Math.min(u*1.9, tw/Math.max(1, maxVisit));
+        var dotGap = Math.min(u*1.9, tw/Math.max(1, dotCount));
         var dotR = Math.max(2.6, Math.min(u*0.42, dotGap*0.32));
         P.st = {rTpl:rTpl, sTpl:sTpl, rStr:rStr, rSize:rSize, sSize:sSize, rLh:Math.round(rSize*1.6), sLh:Math.round(sSize*1.6),
                 dotGap:dotGap, dotR:dotR, dotsH:Math.round(dotR*2 + 4)};
@@ -563,6 +575,7 @@
         if(E.dashed) base.setAttribute('stroke-dasharray', dashArr);
         ctx.mark(base, 'edge');
         gEdges.appendChild(base);
+        E.base = base;
         // arrow head at the end
         var pe = E.pts[E.pts.length-1], pq = E.pts[E.pts.length-2];
         var L = Math.hypot(pe.x-pq.x, pe.y-pq.y) || 1;
@@ -595,12 +608,14 @@
         var fr = 0.5;
         if(li2 + 2 === E.pts.length) fr = Math.max(0.2, Math.min(0.5, 1 - (u*1.5 + arrowLen)/Math.max(1, best2)));
         E.mid = {x:A2.x + (B2.x - A2.x)*fr, y:A2.y + (B2.y - A2.y)*fr};
-        var md = svg('circle', {cx:E.mid.x, cy:E.mid.y, r:midR, fill:okCol});
-        if(dark) md.setAttribute('opacity', 0.95);
-        gFlow.appendChild(md);
-        // ambient flow on forward edges that are long enough to carry it
+        if(!amb){
+          var md = svg('circle', {cx:E.mid.x, cy:E.mid.y, r:midR, fill:okCol});
+          if(dark) md.setAttribute('opacity', 0.95);
+          gFlow.appendChild(md);
+        }
+        // walk-only: sparse ambient flow on forward edges that are long enough to carry it
         E.dots = [];
-        if(!E.back && len >= u*14){
+        if(!amb && !E.back && len >= u*14){
           var nd = Math.max(1, Math.round(len/(u*9)));
           for(var j = 0; j < nd; j++){
             var dc = svg('circle', {cx:0, cy:0, r:Math.max(1.3, u*0.14), fill:okCol, opacity:dark ? 0.4 : 0.35});
@@ -609,6 +624,32 @@
           }
         }
       });
+
+      // ---- ambient packets: one speed (px/s) on every forward edge, seamless within ambientPeriod ----
+      // the flow cycle of an edge is S/k (k whole): a packet moves exactly S per period, so the lap closes
+      var packets = [];
+      var flowS = 0, flowV = 0;
+      if(amb){
+        var fl = edges.filter(function(E){ return !E.back; }).map(function(E){ return E.len; }).sort(function(a, b){ return a - b; });
+        flowS = clamp(fl.length ? fl[Math.floor(fl.length*0.7)] : u*16, u*12, u*30);
+        flowV = flowS/AP;
+        var pr = Math.max(2.2, u*0.26);
+        edges.forEach(function(E){
+          if(E.back) return;
+          var k = Math.max(1, Math.ceil(flowS/E.len - 1e-6));
+          var cyc = flowS/k, cnt = Math.max(1, Math.ceil(E.len/cyc));
+          E.cyc = cyc;
+          E.pk = [];
+          for(var m = 0; m < cnt; m++){
+            var o = {m:m, head:null, halo:null, tr:[]};
+            if(dark) o.halo = gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:pr*2.4, fill:okCol, opacity:0.22}));
+            for(var q = 2; q >= 1; q--) o.tr.push(gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:pr*(1 - 0.2*q), fill:okCol, opacity:q === 1 ? 0.5 : 0.25})));
+            o.head = gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:pr, fill:okCol, opacity:dark ? 0.95 : 0.9}));
+            E.pk.push(o);
+          }
+          E.tail = Math.min(cyc*0.3, u*1.6);
+        });
+      }
 
       // labels: try spots next to the source vertex first (decision labels), then along the segments (long first);
       // keep the first spot clear of nodes, other edges, frame borders, titles, mid dots and earlier labels
@@ -708,13 +749,33 @@
       var nodeLit = {};          // id -> focus overlay element
       var statusRefs = null;
 
-      function iconSvg(name, size, color){
-        var body = ICONS[name];
-        if(!body){ if(name) problems.push('unknown icon "'+name+'" (using circle)'); body = ICONS.circle; }
+      var iconAnims = [];          // {kind, g, parts, ph}: driven by seek, one lap per ambient period
+      var iconCount = 0;
+      function iconSvg(name, size, color, animate){
+        var nm = (animate && ICON_ALIAS[name]) || name;
+        var body = ICONS[nm];
+        if(!body){ if(name) problems.push('unknown icon "'+name+'" (using circle)'); body = ICONS.circle; nm = 'circle'; }
         var s = svg('svg', {viewBox:'0 0 24 24', width:size, height:size, fill:'none', stroke:'currentColor',
           'stroke-width':2, 'stroke-linecap':'round', 'stroke-linejoin':'round'});
-        s.style.cssText = 'display:block;color:'+color+';';
-        s.innerHTML = body;
+        s.style.cssText = 'display:block;overflow:visible;color:'+color+';';
+        if(!animate || !amb){ s.innerHTML = body; return s; }
+        // split the body into top-level elements; the part that moves differently gets its own group
+        var g = svg('g', {});
+        var parts = null, kind = nm;
+        var tmp = svg('g', {}); tmp.innerHTML = body;
+        var kids = Array.prototype.slice.call(tmp.childNodes);
+        if(nm === 'message-square-more'){
+          parts = kids.slice(1).map(function(k){ var pg = svg('g', {}); pg.appendChild(k); return pg; });
+          g.appendChild(kids[0]); parts.forEach(function(pg){ g.appendChild(pg); });
+        } else if(nm === 'timer'){
+          var hand = svg('g', {}); hand.appendChild(kids[1]);
+          parts = [hand]; g.appendChild(kids[0]); g.appendChild(kids[2]); g.appendChild(hand);
+        } else {
+          kids.forEach(function(k){ g.appendChild(k); });
+        }
+        s.appendChild(g);
+        iconAnims.push({kind:kind, g:g, parts:parts, ph:modf(iconCount*0.382, 1)});
+        iconCount += 1;
         return s;
       }
 
@@ -729,8 +790,8 @@
           gNode.appendChild(poly);
           // focus: brighter fill + 2x outline (+ a soft wide halo on dark), one group whose opacity seek drives
           var fg = svg('g', {opacity:0});
-          if(dark) fg.appendChild(svg('polygon', {points:pstr, fill:'none', stroke:rgba(accHex, 0.26), 'stroke-width':strokeW*6, 'stroke-linejoin':'round'}));
-          fg.appendChild(svg('polygon', {points:pstr, fill:rgba(accHex, dark ? 0.2 : 0.16), stroke:accC, 'stroke-width':strokeW*2.3, 'stroke-linejoin':'round'}));
+          if(dark && !weak) fg.appendChild(svg('polygon', {points:pstr, fill:'none', stroke:rgba(accHex, 0.26), 'stroke-width':strokeW*6, 'stroke-linejoin':'round'}));
+          fg.appendChild(svg('polygon', {points:pstr, fill:rgba(accHex, dark ? 0.2 : 0.16), stroke:accC, 'stroke-width':strokeW*(weak ? 1.5 : 2.3), 'stroke-linejoin':'round'}));
           gNodeLit.appendChild(fg);
           nodeLit[n.id] = fg;
           // text in the inscribed rectangle
@@ -784,9 +845,9 @@
 
         // focus overlay lives inside the card, below the text, above the card background: 2x outline in the group colour
         if(!isNote){
-          var ovw = strokeW*2.3;
+          var ovw = strokeW*(weak ? 1.5 : 2.3);
           var ov = el(null, 'position:absolute;left:'+(-bw).toFixed(2)+'px;top:'+(-bw).toFixed(2)+'px;right:'+(-bw).toFixed(2)+'px;bottom:'+(-bw).toFixed(2)+'px;border-radius:'+cardR+'px;border:'+ovw.toFixed(2)+'px solid '+accC+';background:'+rgba(accHex, dark ? 0.16 : 0.14)+';opacity:0;'
-            + (dark ? 'box-shadow:0 0 '+Math.round(u*1.8)+'px '+rgba(accHex, 0.6)+';' : 'box-shadow:0 '+Math.round(u*0.3)+'px '+Math.round(u*1.2)+'px '+rgba(accHex, 0.35)+';'));
+            + (weak ? '' : dark ? 'box-shadow:0 0 '+Math.round(u*1.8)+'px '+rgba(accHex, 0.6)+';' : 'box-shadow:0 '+Math.round(u*0.3)+'px '+Math.round(u*1.2)+'px '+rgba(accHex, 0.35)+';'));
           card.appendChild(ov);
           nodeLit[n.id] = ov;
         }
@@ -795,12 +856,12 @@
         var isize = P.isize, pad = P.pad, tx0 = P.tx0, tw = P.tw;
         if(hasIcon){
           if(isNote){
-            var nic = iconSvg(n.icon, isize, ctx.cc('muted'));
+            var nic = iconSvg(n.icon, isize, ctx.cc('muted'), true);
             nic.style.cssText += 'position:absolute;left:'+pad+'px;top:'+Math.round((n.h - isize)/2)+'px;';
             card.appendChild(nic);
           } else {
             var box = el(null, 'position:absolute;left:'+pad+'px;top:'+Math.round((n.h - isize)/2 - bw)+'px;width:'+isize+'px;height:'+isize+'px;border-radius:'+Math.round(u*0.9)+'px;background:'+(isOut ? accC : mixHex(panelHex, accfHex, 0.9))+';'+(dark && !isOut ? 'box-shadow:0 0 '+Math.round(u*0.9)+'px '+rgba(accHex, 0.28)+';' : ''));
-            var ic = iconSvg(n.icon, Math.round(isize*0.56), isOut ? ctx.cc('bg') : accC);
+            var ic = iconSvg(n.icon, Math.round(isize*0.56), isOut ? ctx.cc('bg') : accC, true);
             ic.style.cssText += 'position:absolute;left:'+Math.round(isize*0.22)+'px;top:'+Math.round(isize*0.22)+'px;';
             box.appendChild(ic);
             card.appendChild(box);
@@ -838,16 +899,17 @@
           var rn = el(null, 'position:absolute;left:'+tx0+'px;width:'+Math.round(tw)+'px;top:'+base0+'px;height:'+S.rLh+'px;line-height:'+S.rLh+'px;font-family:var(--font-title);font-size:'+S.rSize+'px;font-weight:700;font-variant-numeric:tabular-nums;color:'+ctx.cc('fg')+';white-space:pre;text-align:left;');
           rn.textContent = S.rStr[0]; ctx.mark(rn, 'text'); card.appendChild(rn);
           var sn = el(null, 'position:absolute;left:'+tx0+'px;width:'+Math.round(tw)+'px;top:'+(base0 + S.rLh)+'px;height:'+S.sLh+'px;line-height:'+S.sLh+'px;'+ffCss+'font-size:'+S.sSize+'px;color:'+descC+';white-space:pre;text-align:left;');
-          sn.textContent = S.sTpl.replace('{label}', ''); ctx.mark(sn, 'text'); card.appendChild(sn);
+          sn.textContent = ambientOnly ? S.sTpl : S.sTpl.replace('{label}', ''); ctx.mark(sn, 'text'); card.appendChild(sn);
           // progress dots (unmarked decoration, recoloured in seek)
           var dotsSvg = svg('svg', {width:Math.round(tw), height:S.dotsH});
           dotsSvg.style.cssText = 'position:absolute;left:'+tx0+'px;top:'+(base0 + S.rLh + S.sLh + Math.round(u*0.3))+'px;overflow:visible;';
           var stepDots = [];
-          for(var di = 0; di < maxVisit; di++){
+          for(var di = 0; di < dotCount; di++){
             var dc2 = svg('circle', {cx:S.dotR + di*S.dotGap, cy:S.dotsH/2, r:S.dotR, fill:ctx.cc('line2')});
             dotsSvg.appendChild(dc2); stepDots.push(dc2);
           }
           card.appendChild(dotsSvg);
+          rn.textContent = S.rStr[0];
           statusRefs = {off:ctx.cc('line2'), round:rn, step:sn, rTpl:S.rTpl, sTpl:S.sTpl, dots:stepDots, accOn:accC};
         } else {
           var dy0 = ty0 + (n.label ? tLh + (P.enMode === 'below' ? dLh : 0) : 0);
@@ -865,7 +927,7 @@
 
       // ---- walks -> one flat list of hops (the single truth: hop = period / total hops) ----
       var hops = [], roundLen = [];
-      walkSpec.forEach(function(a, ri){
+      (walkOn ? walkSpec : []).forEach(function(a, ri){
         if(a.length < 2){ problems.push('walk '+(ri+1)+' needs at least 2 nodes'); return; }
         if(a[0] !== a[a.length-1]) problems.push('walk '+(ri+1)+' must end on the node it starts from ("'+a[0]+'" vs "'+a[a.length-1]+'")');
         a.forEach(function(id){ if(!byId[id]) problems.push('walk '+(ri+1)+' refers to unknown node "'+id+'"'); });
@@ -878,7 +940,7 @@
         }
       });
       var H = hops.length;
-      if(!H) problems.push('walks is empty');
+      if(!H && walkOn) problems.push('walks is empty');
       var T = H ? period/H : period;
       if(H && T < 1.25) problems.push('hops last '+T.toFixed(2)+'s; the focus crossfade needs ~0.3s, lengthen period or shorten the walks');
 
@@ -896,7 +958,7 @@
       }
 
       // token: head (+ glow on dark) and a 3-step fading trail; the entry token is a smaller twin
-      var tokR = Math.max(5, u*0.7);
+      var tokR = Math.max(5, u*0.7)*(weak ? 0.8 : 1);
       function makeToken(r0, nTrail){
         var tr = [], halo = null;
         for(var k = 0; k < nTrail; k++) tr.push(gTok.appendChild(svg('circle', {cx:-20, cy:-20, r:r0*(0.82 - 0.18*k), fill:okCol, opacity:[0.55, 0.36, 0.2][k]})));
@@ -910,14 +972,73 @@
       var tok = makeToken(tokR, 3);
       var tokIn = entryE ? makeToken(tokR*0.78, 2) : null;
 
-      return {period:period, H:H, T:T, hops:hops, edges:edges, nodeLit:nodeLit, byId:byId, tok:tok, tokIn:tokIn,
+      return {isDark:dark, amb:amb, walkOn:walkOn, AP:AP, ambientOnly:ambientOnly, iconAnims:iconAnims, flowS:flowS, flowV:flowV, dotCount:dotCount, period:period, H:H, T:T, hops:hops, edges:edges, nodeLit:nodeLit, byId:byId, tok:tok, tokIn:tokIn,
               entryE:entryE, entryId:entryId, roundLen:roundLen, status:statusRefs, problems:problems,
               flowPeriod:flowPeriod, dashPeriod:dashPeriod, dashLen:dashLen};
     },
 
     seek: function(t, ctx, st){
+      function ambientSeek(t, s){
+        var AP = s.AP, q0 = modf(t/AP, 1);
+        function smoothS(x){ x = x < 0 ? 0 : (x > 1 ? 1 : x); return x*x*(3 - 2*x); }
+        function fx(v){ return v.toFixed(2); }
+        // packets: position on the edge = (v*t + m*cycle) mod flowS, kept while inside the edge
+        s.edges.forEach(function(E){
+          if(E.back){ E.base.setAttribute('stroke-dashoffset', fx(-modf(q0*2, 1)*s.dashLen)); return; }
+          E.pk.forEach(function(o){
+            var pos = modf(s.flowV*t, E.cyc) + o.m*E.cyc;
+            if(pos >= E.len){ o.head.setAttribute('opacity', 0); o.tr.forEach(function(c){ c.setAttribute('opacity', 0); }); if(o.halo) o.halo.setAttribute('opacity', 0); return; }
+            var f = pos/E.len, a = along(E, f);
+            // fade over the last/first few px so packets do not pop at the card edges
+            var edgeK = Math.min(1, pos/6, (E.len - pos)/6);
+            o.head.setAttribute('cx', fx(a.x)); o.head.setAttribute('cy', fx(a.y)); o.head.setAttribute('opacity', fx(edgeK*(s.isDark ? 0.95 : 0.9)));
+            if(o.halo){ o.halo.setAttribute('cx', fx(a.x)); o.halo.setAttribute('cy', fx(a.y)); o.halo.setAttribute('opacity', fx(edgeK*0.22)); }
+            o.tr.forEach(function(c, i){
+              var tp = pos - E.tail*(i === 0 ? 0.5 : 1);
+              if(tp < 0){ c.setAttribute('opacity', 0); return; }
+              var b = along(E, tp/E.len);
+              c.setAttribute('cx', fx(b.x)); c.setAttribute('cy', fx(b.y)); c.setAttribute('opacity', fx(edgeK*(i === 0 ? 0.25 : 0.5)));
+            });
+          });
+        });
+        // icons: small motions, one lap per ambient period, staggered by node order
+        s.iconAnims.forEach(function(A){
+          var q = modf(q0 + A.ph, 1), tw = Math.PI*2, tf = '';
+          var k = A.kind;
+          if(k === 'message-square-more'){
+            A.parts.forEach(function(pg, i){
+              var x = (q - i*0.2)/0.25, y = (x > 0 && x < 1) ? -2.2*Math.sin(Math.PI*x) : 0;
+              pg.setAttribute('transform', 'translate(0 ' + fx(y) + ')');
+            });
+          } else if(k === 'eye'){
+            var x2 = (q - 0.5)/0.1, sy = (x2 > 0 && x2 < 1) ? 1 - 0.85*Math.sin(Math.PI*x2) : 1;
+            tf = 'translate(0 ' + fx(12*(1 - sy)) + ') scale(1 ' + sy.toFixed(3) + ')';
+          } else if(k === 'ticket') tf = 'rotate(' + fx(6*Math.sin(tw*q)) + ' 12 12)';
+          else if(k === 'bug') tf = 'rotate(' + fx(5*Math.sin(tw*q)) + ' 12 18)';
+          else if(k === 'git-pull-request' || k === 'git-merge') tf = 'translate(0 ' + fx(1.5*Math.sin(tw*q)) + ')';
+          else if(k === 'shield-check'){ var sc = 1 + 0.08*(0.5 - 0.5*Math.cos(tw*q)); tf = 'translate(12 12) scale(' + sc.toFixed(3) + ') translate(-12 -12)'; }
+          else if(k === 'timer'){
+            var fr = q*8, ti = Math.floor(fr), ang = 45*(ti + smoothS((fr - ti)/0.25));
+            A.parts[0].setAttribute('transform', 'rotate(' + fx(ang) + ' 12 14)');
+          }
+          else if(k === 'refresh-cw') tf = 'rotate(' + fx(360*q) + ' 12 12)';
+          else { var sb = 1 + 0.05*(0.5 - 0.5*Math.cos(tw*q)); tf = 'translate(12 12) scale(' + sb.toFixed(3) + ') translate(-12 -12)'; }
+          if(tf) A.g.setAttribute('transform', tf);
+        });
+        // status card in pure ambient: a lit dot chases along the row, one step per AP/N
+        if(s.ambientOnly && s.status){
+          var N = s.status.dots.length, hi = Math.floor(q0*N) % N;
+          s.status.dots.forEach(function(d, k){
+            d.setAttribute('fill', k === hi ? s.status.accOn : s.status.off);
+            d.setAttribute('opacity', k === hi ? 1 : (k === (hi - 1 + N) % N ? 0.6 : 0.9));
+          });
+        }
+      }
+
       var s = st || (ctx && ctx.state);
-      if(!s || !s.H) return;
+      if(!s) return;
+      if(s.amb) ambientSeek(t, s);
+      if(!s.H) return;
       var P = s.period, T = s.T, H = s.H;
       var ease = LP.ease.inOut;
       function smooth(x){ x = x < 0 ? 0 : (x > 1 ? 1 : x); return x*x*(3 - 2*x); }
@@ -963,7 +1084,7 @@
       }
       Object.keys(s.nodeLit).forEach(function(id){ s.nodeLit[id].style.opacity = (nodeI[id] || 0).toFixed(3); });
       function put(c, pos){ c.setAttribute('cx', pos.x.toFixed(1)); c.setAttribute('cy', pos.y.toFixed(1)); }
-      var dashOff = -((t/s.dashPeriod) % 1) * s.dashLen;
+      var dashOff = s.amb ? -modf(t/s.AP*2, 1)*s.dashLen : -((t/s.dashPeriod) % 1) * s.dashLen;
       s.edges.forEach(function(E, k){
         E.lit.setAttribute('opacity', edgeI[k].toFixed(3));
         if(E.dashed) E.lit.setAttribute('stroke-dashoffset', dashOff.toFixed(2));
@@ -986,7 +1107,7 @@
       if(s.tokIn) place(s.tokIn, entryAt, 0.09*T);
 
       // status card: round (1..R), current step and visited-node dots; the step flips with the focus
-      if(s.status){
+      if(s.status && !s.ambientOnly){
         var onTarget = m >= 0.5;
         var nodeId = onTarget ? hop.to : hop.from;
         var kk2 = hop.k + (onTarget ? 1 : 0);
@@ -1002,7 +1123,7 @@
 
     events: function(lo, hi, ctx){
       var s = ctx && ctx.state;
-      if(!s || !s.H) return [];
+      if(!s || !s.H || s.ambientOnly) return [];
       var out = [];
       var k0 = Math.floor(lo/s.T), k1 = Math.ceil(hi/s.T);
       var logc = (ctx.e.log && ctx.e.log.c) || 'acc1';
@@ -1020,6 +1141,11 @@
       var s = ctx.state;
       if(s && s.problems) pr = pr.concat(s.problems);
       var e = ctx.e;
+      var mo = e.motion || 'ambient', apc = Number(e.ambientPeriod) || 2.5;
+      if(mo.indexOf('walk') >= 0 && mo.indexOf('ambient') >= 0){
+        var per = Number(e.period) || 26, qq = per/apc;
+        if(Math.abs(qq - Math.round(qq)) > 1e-6) pr.push('period '+per+' is not a whole multiple of ambientPeriod '+apc);
+      }
       // grid cells, spans included
       var seen = {};
       (e.nodes||[]).forEach(function(n){
