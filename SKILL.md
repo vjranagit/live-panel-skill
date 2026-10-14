@@ -23,6 +23,7 @@ A single JSON config (schema: `references/config-schema.md`). It holds everythin
 
 If the content has one clear shape, use a `{"type":"view"}` element instead of placing boxes by hand (contract: `references/views.md`; gate: `scripts/verify_view.py` must PASS all 7 combos):
 - repeating loop → `ring`; stage-by-stage drop-off → `funnel` (both ready, see `examples/ring/`, `examples/funnel/`).
+- nested workflow with decisions and loop-backs (retry on "no", outer/inner loop, human gate) → `loop` (ready, see `examples/loop-poteto/`).
 - relationships/clusters → `nebula`; work over time/parallel tracks → `timeline`; hierarchy → `tree`; a few watched numbers → `kpi` (planned, not in this version yet).
 - an architecture with arbitrary boxes and wires → no view, free-form elements as in the original examples.
 
@@ -50,7 +51,7 @@ The page exposes `window.seek(t)`. Every visual is a pure function of `t` (and a
 
 - `assets/template.html` - the generic page. `scripts/scaffold.py` - short spec -> complete config (layout done for you). `scripts/render.py` - mp4. `scripts/check_frames.py` - checks + PNGs. `scripts/livepanel.py` - shared helpers (Chrome over the DevTools pipe, stdlib only).
 - `references/motion-grammar.md`, `references/config-schema.md`.
-- `examples/codex-agents/`, `examples/airbnb/`, `examples/agent-architecture/` - config, mp4 and screenshots. `examples/ring/`, `examples/funnel/`, `examples/funnel-karpathy/` (log scale, mono palette) - view examples.
+- `examples/codex-agents/`, `examples/airbnb/`, `examples/agent-architecture/` - config, mp4 and screenshots. `examples/ring/`, `examples/funnel/`, `examples/funnel-karpathy/` (log scale, mono palette), `examples/loop-poteto/` (grouped loop with decisions) - view examples.
 - `assets/views/<kind>.js` - one file per view; `references/views.md`, `references/view-rules.md`, `references/verify-view.md`; `scripts/verify_view.py`.
 
 ## Light theme notes

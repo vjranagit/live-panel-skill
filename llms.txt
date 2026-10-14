@@ -18,7 +18,7 @@ Key facts:
 - [SKILL.md](https://github.com/ythx-101/live-panel-skill/blob/main/SKILL.md): the agent skill - when to use it, fixed procedure, motion rules, credit rule
 - [Config schema](https://github.com/ythx-101/live-panel-skill/blob/main/references/config-schema.md): every JSON key, element and state machine
 - [Motion grammar](https://github.com/ythx-101/live-panel-skill/blob/main/references/motion-grammar.md): the three-tempo motion rules and timing recipe
-- [Views](https://github.com/ythx-101/live-panel-skill/blob/main/references/views.md): auto-laid-out diagram shapes (`ring` loop, `funnel` conversion; nebula/timeline/tree/kpi planned) that work at 4:5, 3:4 and 1:1 in both themes; acceptance gate `scripts/verify_view.py`
+- [Views](https://github.com/ythx-101/live-panel-skill/blob/main/references/views.md): auto-laid-out diagram shapes (`ring` loop, `funnel` conversion, `loop` nested workflow with decisions; nebula/timeline/tree/kpi planned) that work at 4:5, 3:4 and 1:1 in both themes; acceptance gate `scripts/verify_view.py`
 
 ## Examples
 
@@ -27,6 +27,7 @@ Key facts:
 - [Airbnb](https://github.com/ythx-101/live-panel-skill/blob/main/examples/airbnb/config.json): terminal-dark 4:5, Chinese content, figures from a public interview
 - [AI Agent architecture](https://github.com/ythx-101/live-panel-skill/blob/main/examples/agent-architecture/config.json): light-pastel 3:4 Xiaohongshu infographic made to move (credited to 小红书 @林纾)
 - [Ring view](https://github.com/ythx-101/live-panel-skill/blob/main/examples/ring/config.json) and [funnel view](https://github.com/ythx-101/live-panel-skill/blob/main/examples/funnel/config.json): agent loop and bug-fix pipeline, laid out automatically
+- [Loop view](https://github.com/ythx-101/live-panel-skill/blob/main/examples/loop-poteto/config.json): outer/inner loop with decision diamonds and loop-backs, from a public thread by @poteto
 - [Karpathy funnel](https://github.com/ythx-101/live-panel-skill/blob/main/examples/funnel-karpathy/config.json): real-data funnel from 8B people to 5,000, log-scale widths
 
 ## Code

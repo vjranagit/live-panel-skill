@@ -102,6 +102,7 @@ Besides free-form boxes and wires, a config can hold `{"type":"view","kind":...}
 | --- | --- | --- |
 | a loop that repeats (agent plan→act→verify, PDCA, release cycle) | `ring` - 3-8 steps on a circle, comet, lap counter | ready (`examples/ring/`) |
 | how many survive each stage (bug→merged PR, signup→paid) | `funnel` - widths proportional to values, conversion % between stages | ready (`examples/funnel/`; log widths + one-accent palette for population-scale data: `examples/funnel-karpathy/`) |
+| a nested workflow with decisions and loop-backs (outer / inner loop, retry on "no", human gate) | `loop` - grouped frames, icon cards, decision diamonds, dashed loop-backs, a token walking the script | ready (`examples/loop-poteto/`) |
 | who relates to whom, clusters of a knowledge base or ecosystem | `nebula` - force layout by group, halos, packets on strong edges | planned |
 | work over time, parallel tracks, dependencies | `timeline` - lanes, playhead, done/active/pending | planned |
 | a hierarchy (agent → sub-agents → tools, org chart) | `tree` - tidy tree, expand/collapse without layout jumps | planned |
@@ -233,6 +234,7 @@ MIT for the code (see `LICENSE`; carve-outs for the recreated example designs ar
 | --- | --- | --- |
 | 循环往复的流程（agent 规划→执行→验证→反思、PDCA、发版周期） | `ring` 环形 | 已完成 |
 | 每一步还剩多少（Bug→合并 PR、注册→付费） | `funnel` 漏斗 | 已完成（跨数量级的真实数据用对数宽度 + 单色重点：`examples/funnel-karpathy/`） |
+| 带分支判定和回环的嵌套工作流（外环/内环、No 就回去、人工闸门） | `loop` 分组回环图 | 已完成（`examples/loop-poteto/`） |
 | 谁和谁有关系、知识库/生态的聚类 | `nebula` 星云/关系图谱 | 待做 |
 | 随时间推进、多条并行泳道、依赖 | `timeline` 时间线/泳道 | 待做 |
 | 层级结构（主 agent→子 agent→工具、组织架构） | `tree` 层级树 | 待做 |
