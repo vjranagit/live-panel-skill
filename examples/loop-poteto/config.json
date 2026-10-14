@@ -5,7 +5,7 @@
  },
  "canvas": {
   "preset": "4:5",
-  "duration": 20,
+  "duration": 18,
   "fps": 30
  },
  "theme": {
@@ -369,7 +369,7 @@
     ]
    ],
    "motion": "ambient",
-   "ambientPeriod": 2.5
+   "ambientPeriod": 3.0
   }
  ]
 }

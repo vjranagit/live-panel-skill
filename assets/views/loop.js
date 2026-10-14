@@ -99,6 +99,16 @@
     {isz:3.2, tS:1.35, dS:1.05, padV:0.55, maxDesc:2}
   ];
   var ICON_ALIAS = {'message-square':'message-square-more'};   // the chat bubble always carries its three dots
+
+  // easing helpers: every micro-motion runs inside a short action window of the ambient period
+  function easeInOutCubic(x){ x = x < 0 ? 0 : (x > 1 ? 1 : x); return x < 0.5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3)/2; }
+  function easeOutBack(x, o){ x = x < 0 ? 0 : (x > 1 ? 1 : x); var c1 = o === undefined ? 1.6 : o, c3 = c1 + 1, y = x - 1; return 1 + c3*y*y*y + c1*y*y; }
+  function easeOutElastic(x){ x = x < 0 ? 0 : (x > 1 ? 1 : x); if(x === 0 || x === 1) return x; return Math.pow(2, -9*x)*Math.sin((x*8 - 0.75)*(2*Math.PI/3)) + 1; }
+  function bump(x){ x = x < 0 ? 0 : (x > 1 ? 1 : x); var s = Math.sin(Math.PI*x); return s*s; }
+  // rise with a slight overshoot, then settle back (0 → 1 → 0)
+  function leap(x){ x = x < 0 ? 0 : (x > 1 ? 1 : x); return x < 0.5 ? easeOutBack(x*2, 1.6) : 1 - easeInOutCubic((x - 0.5)*2); }
+  // action window per icon kind, as a fraction of the ambient period
+  var ICON_WIN = {'message-square-more':0.4, 'timer':0.5, 'refresh-cw':0.7, 'shield-check':0.45, 'eye':0.4, 'ticket':0.35, 'bug':0.4};
   var FOCUS_AT = 0.7;                // fraction of a hop at which the focus passes from source to target
 
   LP.registerView('loop', {
@@ -111,7 +121,7 @@
       var motion = e.motion || 'ambient';
       var amb = motion.indexOf('ambient') >= 0, walkOn = motion.indexOf('walk') >= 0;
       var weak = amb && walkOn;                       // walk laid over ambient: quieter focus
-      var AP = Number(e.ambientPeriod) || 2.5;
+      var AP = Number(e.ambientPeriod) || 3.0;
       if(!amb && !walkOn){ problems.push('motion "'+motion+'" is not ambient | walk | ambient+walk'); }
       var HUE = dark ? HUE_DARK : HUE_LIGHT;
       var ff = e.font === 'theme' ? null : SANS;
@@ -347,13 +357,15 @@
         var nRows = maxRow + 1;
         var gwB = blocks.length - 1, gwR = 0, gwG = 0;
         blocks.forEach(function(b){ gwR += b.rows.length - 1; if(b.group) gwG += 1; });
-        grow = Math.min(spare*0.18/nRows, G.cardRef*0.12);
+        grow = Math.min(spare*0.6/nRows, G.cardRef*0.35);
         var rest2 = spare - grow*nRows;
-        var unit = rest2/Math.max(1, 3*gwB + 3*gwR + 3*gwG);
-        // each gap between groups is capped at ~6u; what it cannot take goes into the group padding
-        var gapAdd = Math.min(3*unit, Math.max(0, u*6 - base.blockGap));
-        var padAdd = gwG ? (3*unit - gapAdd)*gwB/gwG : 0;
-        sp.blockGap += gapAdd; sp.rowGap += 3*unit; sp.gpT += 1.5*unit + padAdd/2; sp.gpB += 1.5*unit + padAdd/2;
+        // between groups at most 4u, between rows at most ~3u; the remainder pads the group frames (title zone)
+        var bAdd = gwB ? Math.min(Math.max(0, u*4 - base.blockGap), rest2*0.4/gwB) : 0;
+        var rAdd = gwR ? Math.min(u*1.8, rest2*0.3/gwR) : 0;
+        var left2 = rest2 - bAdd*gwB - rAdd*gwR;
+        if(gwG){ var pA = left2/gwG/2; sp.gpT += pA; sp.gpB += pA; }
+        else if(gwB){ bAdd += left2/gwB; }
+        sp.blockGap += bAdd; sp.rowGap += rAdd;
       } else {
         var sum = base.blockGap*(blocks.length-1) + base.rowGap + base.gpT + base.gpB;
         var f = Math.max(0.5, 1 + spare/Math.max(1, sum));
@@ -631,23 +643,40 @@
       var flowS = 0, flowV = 0;
       if(amb){
         var fl = edges.filter(function(E){ return !E.back; }).map(function(E){ return E.len; }).sort(function(a, b){ return a - b; });
-        flowS = clamp(fl.length ? fl[Math.floor(fl.length*0.7)] : u*16, u*12, u*30);
+        // big and few: S is at least half the longest forward edge, so no edge carries more than two packets
+        flowS = Math.max(u*14, fl.length ? Math.max(fl[Math.floor(fl.length*0.7)], fl[fl.length - 1]/2) : u*16);
         flowV = flowS/AP;
-        var pr = Math.max(2.2, u*0.26);
+        var pr = Math.max(4.4, u*0.52);
+        var defs = svg('defs', {}), flt = svg('filter', {id:'lpLoopGlow', filterUnits:'userSpaceOnUse', x:0, y:0, width:w, height:h});
+        flt.appendChild(svg('feGaussianBlur', {'in':'SourceGraphic', stdDeviation:(pr*0.9).toFixed(1), result:'b'}));
+        var fm = svg('feMerge', {});
+        fm.appendChild(svg('feMergeNode', {'in':'b'})); fm.appendChild(svg('feMergeNode', {'in':'SourceGraphic'}));
+        flt.appendChild(fm); defs.appendChild(flt); svgEl.insertBefore(defs, svgEl.firstChild);
+        if(dark) gFlow.setAttribute('filter', 'url(#lpLoopGlow)');
+        function makePk(r0, nTr){
+          var o = {head:null, halo:null, tr:[]};
+          if(!dark) o.halo = gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:r0*1.9, fill:okCol, opacity:0}));
+          for(var q = 0; q < nTr; q++) o.tr.push(gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:r0*(1 - 0.13*(q + 1)), fill:okCol, opacity:0})));
+          o.head = gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:r0, fill:okCol, opacity:0}));
+          return o;
+        }
         edges.forEach(function(E){
-          if(E.back) return;
-          var k = Math.max(1, Math.ceil(flowS/E.len - 1e-6));
-          var cyc = flowS/k, cnt = Math.max(1, Math.ceil(E.len/cyc));
-          E.cyc = cyc;
-          E.pk = [];
-          for(var m = 0; m < cnt; m++){
-            var o = {m:m, head:null, halo:null, tr:[]};
-            if(dark) o.halo = gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:pr*2.4, fill:okCol, opacity:0.22}));
-            for(var q = 2; q >= 1; q--) o.tr.push(gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:pr*(1 - 0.2*q), fill:okCol, opacity:q === 1 ? 0.5 : 0.25})));
-            o.head = gFlow.appendChild(svg('circle', {cx:-20, cy:-20, r:pr, fill:okCol, opacity:dark ? 0.95 : 0.9}));
-            E.pk.push(o);
+          if(E.back){
+            // one lit dot rides every loop-back dash once per period: a size smaller, translucent, two-step tail
+            var bo = makePk(pr*0.72, 2);
+            bo.head.setAttribute('fill', warnCol); bo.tr.forEach(function(c){ c.setAttribute('fill', warnCol); });
+            E.bk = bo; E.bkTail = Math.min(E.len*0.04, u*1.2);
+            return;
           }
-          E.tail = Math.min(cyc*0.3, u*1.6);
+          var k = Math.max(1, Math.ceil(flowS/E.len - 1e-6));
+          var cyc = flowS/k, cnt = Math.max(1, Math.ceil(E.len/cyc - 1e-6));
+          E.cyc = cyc; E.k = k;
+          E.pk = [];
+          for(var m = 0; m < cnt; m++){ var o = makePk(pr, 5); o.m = m; E.pk.push(o); }
+          E.tail = Math.min(cyc*0.3, u*2.4);
+          // arrival of the first packet at the card border, inside one cycle (period/k): drives the node ripple
+          var mm = Math.floor(E.len/cyc - 1e-6);
+          E.arrive = (E.len - mm*cyc)/flowV;
         });
       }
 
@@ -747,6 +776,7 @@
       var cardR = Math.round(u*1.1);
       var hiddenLines = 0, totalLines = 0;
       var nodeLit = {};          // id -> focus overlay element
+      var ripples = [];          // delivery feedback, one per node that has a forward incoming edge
       var statusRefs = null;
 
       var iconAnims = [];          // {kind, g, parts, ph}: driven by seek, one lap per ambient period
@@ -768,13 +798,19 @@
           parts = kids.slice(1).map(function(k){ var pg = svg('g', {}); pg.appendChild(k); return pg; });
           g.appendChild(kids[0]); parts.forEach(function(pg){ g.appendChild(pg); });
         } else if(nm === 'timer'){
-          var hand = svg('g', {}); hand.appendChild(kids[1]);
-          parts = [hand]; g.appendChild(kids[0]); g.appendChild(kids[2]); g.appendChild(hand);
+          var hand = svg('g', {}), knob = svg('g', {}); hand.appendChild(kids[1]); knob.appendChild(kids[0]);
+          parts = [hand, knob]; g.appendChild(knob); g.appendChild(kids[2]); g.appendChild(hand);
+        } else if(nm === 'eye'){
+          var pup = svg('g', {}); pup.appendChild(kids[1]);
+          parts = [pup]; g.appendChild(kids[0]); g.appendChild(pup);
+        } else if(nm === 'shield-check'){
+          kids[1].setAttribute('pathLength', 1); kids[1].setAttribute('stroke-dasharray', '1 2');
+          parts = [kids[1]]; kids.forEach(function(k){ g.appendChild(k); });
         } else {
           kids.forEach(function(k){ g.appendChild(k); });
         }
         s.appendChild(g);
-        iconAnims.push({kind:kind, g:g, parts:parts, ph:modf(iconCount*0.382, 1)});
+        iconAnims.push({kind:kind, g:g, parts:parts, ph:modf(iconCount*0.37, 1), k:24/size});
         iconCount += 1;
         return s;
       }
@@ -794,6 +830,11 @@
           fg.appendChild(svg('polygon', {points:pstr, fill:rgba(accHex, dark ? 0.2 : 0.16), stroke:accC, 'stroke-width':strokeW*(weak ? 1.5 : 2.3), 'stroke-linejoin':'round'}));
           gNodeLit.appendChild(fg);
           nodeLit[n.id] = fg;
+          if(amb){
+            var rp = svg('polygon', {points:pstr, fill:'none', stroke:accC, 'stroke-width':strokeW*1.6, 'stroke-linejoin':'round', 'stroke-opacity':0});
+            gNodeLit.appendChild(rp);
+            ripples.push({id:n.id, poly:rp, cx:n.cx, cy:n.cy, a:n.w/2, b:n.h/2, L:Math.hypot(n.w/2, n.h/2)});
+          }
           // text in the inscribed rectangle
           var iw = n.w/2*0.98, ih = n.h/2*0.96;
           var ls1 = clamp(u*1.5, 13, 19)*scale, es1 = Math.max(11, Math.round(ls1*0.72));
@@ -850,6 +891,12 @@
             + (weak ? '' : dark ? 'box-shadow:0 0 '+Math.round(u*1.8)+'px '+rgba(accHex, 0.6)+';' : 'box-shadow:0 '+Math.round(u*0.3)+'px '+Math.round(u*1.2)+'px '+rgba(accHex, 0.35)+';'));
           card.appendChild(ov);
           nodeLit[n.id] = ov;
+          if(amb){
+            var ringCss = 'position:absolute;box-sizing:border-box;pointer-events:none;border-radius:'+(cardR + 3)+'px;border:'+(strokeW*1.4).toFixed(2)+'px solid '+accC+';';
+            var ring = el(null, ringCss + 'opacity:0;');
+            card.appendChild(ring);
+            ripples.push({id:n.id, ring:ring, ringCss:ringCss, card:card, bw:bw, glow:rgba(accHex, 'A')});
+          }
         }
 
         var hasIcon = n.icon != null;
@@ -921,6 +968,40 @@
           totalLines += P.total; hiddenLines += P.hidden;
         }
       });
+      // first forward incoming edge decides when the ripple starts (0.15 s before the packet lands)
+      ripples = ripples.filter(function(R){
+        var inE = edges.filter(function(E){ return !E.back && E.b.id === R.id && E.arrive !== undefined; })[0];
+        if(!inE) return false;
+        R.t0 = inE.arrive - 0.15; R.inE = inE;
+        return true;
+      });
+      // stagger delivery: spread the ripple instants evenly over the ambient period, in node order, and shift each
+      // incoming edge's packet phase (whole cycle, same speed) so its first arrival lands on that instant
+      if(amb){
+        var gi = 0;
+        edges.forEach(function(E){ if(!E.back && E.pk){ E.off = modf(gi*0.618034, 1)*E.cyc; gi += 1; } });
+        var NR = ripples.length;
+        ripples.forEach(function(R, i){
+          var E = R.inE, target = AP*i/NR;
+          E.off = modf((E.arrive - (target + 0.15))/(E.cyc/flowV), 1)*E.cyc;
+          R.t0 = target;
+        });
+        // icon action windows: evenly spread over the period so few are active at once
+        // greedy: longest windows first, each at the phase that keeps the busiest instant lowest
+        var NS = 60, cover = [], order = iconAnims.slice().sort(function(a, b){ return (ICON_WIN[b.kind] || 0.35) - (ICON_WIN[a.kind] || 0.35); });
+        for(var si = 0; si < NS; si++) cover.push(0);
+        order.forEach(function(A){
+          var win = ICON_WIN[A.kind] || 0.35, best = 0, bestV = 1e9;
+          for(var c = 0; c < NS; c++){
+            var peak = 0, sum = 0;
+            for(var j = 0; j < NS; j++){ var on = modf(j/NS + c/NS, 1) < win ? 1 : 0; peak = Math.max(peak, cover[j] + on); sum += (cover[j] + on)*on; }
+            var v = peak*1000 + sum;
+            if(v < bestV){ bestV = v; best = c; }
+          }
+          A.ph = best/NS;
+          for(var j2 = 0; j2 < NS; j2++) if(modf(j2/NS + best/NS, 1) < win) cover[j2] += 1;
+        });
+      }
       labelNodes.forEach(function(l){ htmlLayer.appendChild(l); });
       totalLines += totalEn; hiddenLines += hiddenEn;
       if(totalLines && hiddenLines/totalLines > 0.2) problems.push('R14: '+hiddenLines+' of '+totalLines+' description lines / English glosses hidden for lack of space (> 20%)');
@@ -972,7 +1053,7 @@
       var tok = makeToken(tokR, 3);
       var tokIn = entryE ? makeToken(tokR*0.78, 2) : null;
 
-      return {isDark:dark, amb:amb, walkOn:walkOn, AP:AP, ambientOnly:ambientOnly, iconAnims:iconAnims, flowS:flowS, flowV:flowV, dotCount:dotCount, period:period, H:H, T:T, hops:hops, edges:edges, nodeLit:nodeLit, byId:byId, tok:tok, tokIn:tokIn,
+      return {ripples:ripples, isDark:dark, amb:amb, walkOn:walkOn, AP:AP, ambientOnly:ambientOnly, iconAnims:iconAnims, flowS:flowS, flowV:flowV, dotCount:dotCount, period:period, H:H, T:T, hops:hops, edges:edges, nodeLit:nodeLit, byId:byId, tok:tok, tokIn:tokIn,
               entryE:entryE, entryId:entryId, roundLen:roundLen, status:statusRefs, problems:problems,
               flowPeriod:flowPeriod, dashPeriod:dashPeriod, dashLen:dashLen};
     },
@@ -983,47 +1064,93 @@
         function smoothS(x){ x = x < 0 ? 0 : (x > 1 ? 1 : x); return x*x*(3 - 2*x); }
         function fx(v){ return v.toFixed(2); }
         // packets: position on the edge = (v*t + m*cycle) mod flowS, kept while inside the edge
+        function dot(o, a, v, hv){ o.setAttribute('cx', fx(a.x)); o.setAttribute('cy', fx(a.y)); o.setAttribute('opacity', fx(v)); }
+        function hide(o){ o.head.setAttribute('opacity', 0); o.tr.forEach(function(c){ c.setAttribute('opacity', 0); }); if(o.halo) o.halo.setAttribute('opacity', 0); }
+        function show(o, E, pos, tail, edgeK, hv){
+          var a = along(E, pos/E.len);
+          dot(o.head, a, edgeK*hv);
+          if(o.halo){ dot(o.halo, a, edgeK*0.14); }
+          var n = o.tr.length;
+          o.tr.forEach(function(c, i){
+            var tp = pos - tail*(i + 1)/n;
+            if(tp < 0){ c.setAttribute('opacity', 0); return; }
+            dot(c, along(E, tp/E.len), edgeK*hv*(0.62 - 0.11*i));
+          });
+        }
+        var hv = s.isDark ? 0.96 : 0.9;
         s.edges.forEach(function(E){
-          if(E.back){ E.base.setAttribute('stroke-dashoffset', fx(-modf(q0*2, 1)*s.dashLen)); return; }
+          if(E.back){
+            E.base.setAttribute('stroke-dashoffset', fx(-modf(q0*3, 1)*s.dashLen));
+            if(E.bk){
+              var pos = q0*E.len;
+              show(E.bk, E, pos, E.bkTail*2, Math.min(1, pos/8, (E.len - pos)/8), 0.7);
+            }
+            return;
+          }
           E.pk.forEach(function(o){
-            var pos = modf(s.flowV*t, E.cyc) + o.m*E.cyc;
-            if(pos >= E.len){ o.head.setAttribute('opacity', 0); o.tr.forEach(function(c){ c.setAttribute('opacity', 0); }); if(o.halo) o.halo.setAttribute('opacity', 0); return; }
-            var f = pos/E.len, a = along(E, f);
+            var pos = modf(s.flowV*t + (E.off || 0), E.cyc) + o.m*E.cyc;
+            if(pos >= E.len){ hide(o); return; }
             // fade over the last/first few px so packets do not pop at the card edges
-            var edgeK = Math.min(1, pos/6, (E.len - pos)/6);
-            o.head.setAttribute('cx', fx(a.x)); o.head.setAttribute('cy', fx(a.y)); o.head.setAttribute('opacity', fx(edgeK*(s.isDark ? 0.95 : 0.9)));
-            if(o.halo){ o.halo.setAttribute('cx', fx(a.x)); o.halo.setAttribute('cy', fx(a.y)); o.halo.setAttribute('opacity', fx(edgeK*0.22)); }
-            o.tr.forEach(function(c, i){
-              var tp = pos - E.tail*(i === 0 ? 0.5 : 1);
-              if(tp < 0){ c.setAttribute('opacity', 0); return; }
-              var b = along(E, tp/E.len);
-              c.setAttribute('cx', fx(b.x)); c.setAttribute('cy', fx(b.y)); c.setAttribute('opacity', fx(edgeK*(i === 0 ? 0.25 : 0.5)));
-            });
+            show(o, E, pos, E.tail, Math.min(1, pos/7, (E.len - pos)/7), hv);
           });
         });
-        // icons: small motions, one lap per ambient period, staggered by node order
+        // delivery: ripple on the node at the first arrival of its first incoming packet, a smooth >= 0.9 s bump
+        s.ripples.forEach(function(R){
+          var x = modf(t - R.t0, AP)/0.9, b = x < 1 ? bump(x) : 0;
+          if(R.poly){
+            var e = 6*Math.min(x, 1), a2 = R.a + e*R.L/R.b, b2 = R.b + e*R.L/R.a;
+            R.poly.setAttribute('points', (R.cx)+','+fx(R.cy - b2)+' '+fx(R.cx + a2)+','+(R.cy)+' '+(R.cx)+','+fx(R.cy + b2)+' '+fx(R.cx - a2)+','+(R.cy));
+            R.poly.setAttribute('stroke-opacity', fx(0.9*b));
+          } else {
+            var sp = bw2(R, x);
+            R.ring.style.cssText = R.ringCss + 'opacity:' + fx(0.9*b) + ';left:' + sp + 'px;top:' + sp + 'px;right:' + sp + 'px;bottom:' + sp + 'px;';
+            R.card.style.transform = 'translateY(' + fx(-2*b) + 'px)';
+            R.card.style.boxShadow = s.isDark ? '0 0 ' + fx(18*b) + 'px ' + R.glow.replace('A', fx(0.55*b)) : 'none';
+            R.card.style.filter = s.isDark ? '' : 'drop-shadow(0 ' + fx(3*b) + 'px ' + fx(5*b) + 'px ' + R.glow.replace('A', fx(0.28*b)) + ')';
+          }
+        });
+        function bw2(R, x){ return (-(R.bw + 6*Math.min(x, 1))).toFixed(2); }
+        // icons: one action window per ambient period (phase staggered by node order), still or breathing otherwise
         s.iconAnims.forEach(function(A){
-          var q = modf(q0 + A.ph, 1), tw = Math.PI*2, tf = '';
-          var k = A.kind;
+          var k = A.kind, q = modf(q0 + A.ph, 1), win = ICON_WIN[k] || 0.35, w = q/win, on = w < 1;
+          var px = A.k, tf = '', breath = on ? 1 + 0.08*bump(w) : 1;
           if(k === 'message-square-more'){
             A.parts.forEach(function(pg, i){
-              var x = (q - i*0.2)/0.25, y = (x > 0 && x < 1) ? -2.2*Math.sin(Math.PI*x) : 0;
+              var x = (w*win*AP - i*0.12*AP)/(0.4*AP), y = (on && x > 0 && x < 1) ? -5*px*leap(x) : 0;
               pg.setAttribute('transform', 'translate(0 ' + fx(y) + ')');
             });
           } else if(k === 'eye'){
-            var x2 = (q - 0.5)/0.1, sy = (x2 > 0 && x2 < 1) ? 1 - 0.85*Math.sin(Math.PI*x2) : 1;
+            var sy = 1, dx = 0;
+            if(on){
+              var sec = w*win*AP;
+              if(sec < 0.25) sy = 1 - 0.9*bump(sec/0.25);
+              else {
+                var u2 = (sec - 0.25)/(win*AP - 0.25);
+                dx = u2 < 1/3 ? -2.5*easeInOutCubic(u2*3) : (u2 < 2/3 ? -2.5 + 5*easeInOutCubic(u2*3 - 1) : 2.5*(1 - easeInOutCubic(u2*3 - 2)));
+              }
+            }
+            A.parts[0].setAttribute('transform', 'translate(' + fx(dx*px) + ' 0)');
             tf = 'translate(0 ' + fx(12*(1 - sy)) + ') scale(1 ' + sy.toFixed(3) + ')';
-          } else if(k === 'ticket') tf = 'rotate(' + fx(6*Math.sin(tw*q)) + ' 12 12)';
-          else if(k === 'bug') tf = 'rotate(' + fx(5*Math.sin(tw*q)) + ' 12 18)';
-          else if(k === 'git-pull-request' || k === 'git-merge') tf = 'translate(0 ' + fx(1.5*Math.sin(tw*q)) + ')';
-          else if(k === 'shield-check'){ var sc = 1 + 0.08*(0.5 - 0.5*Math.cos(tw*q)); tf = 'translate(12 12) scale(' + sc.toFixed(3) + ') translate(-12 -12)'; }
-          else if(k === 'timer'){
-            var fr = q*8, ti = Math.floor(fr), ang = 45*(ti + smoothS((fr - ti)/0.25));
-            A.parts[0].setAttribute('transform', 'rotate(' + fx(ang) + ' 12 14)');
+          } else if(k === 'ticket'){
+            tf = 'rotate(' + fx(on ? 12*(w < 0.2 ? easeInOutCubic(w/0.2) : 1 - easeOutElastic((w - 0.2)/0.8)) : 0) + ' 12 12)';
+          } else if(k === 'bug'){
+            var bw = on ? Math.sin(2*Math.PI*w)*bump(w < 0.5 ? w*2 : 1) : 0, bh = on ? 8*Math.sin(4*Math.PI*w) : 0;
+            tf = 'translate(' + fx(3*px*bw) + ' 0) rotate(' + fx(bh) + ' 12 16)';
+          } else if(k === 'git-pull-request' || k === 'git-merge'){
+            tf = 'translate(0 ' + fx(on ? -7*px*leap(w) : 0) + ')';
+          } else if(k === 'shield-check'){
+            var sc = on ? 1 + 0.18*leap(w) : 1;
+            var dr = on ? (w < 0.15 ? easeInOutCubic(w/0.15) : 1 - easeInOutCubic((w - 0.15)/0.6)) : 0;
+            A.parts[0].setAttribute('stroke-dashoffset', fx(Math.min(1, dr)*1.05));
+            breath = 1; tf = 'translate(12 12) scale(' + sc.toFixed(3) + ') translate(-12 -12)';
+          } else if(k === 'timer'){
+            A.parts[0].setAttribute('transform', 'rotate(' + fx(on ? 360*easeInOutCubic(w) : 0) + ' 12 14)');
+            A.parts[1].setAttribute('transform', 'translate(0 ' + fx(on && w < 0.2 ? 1.5*px*bump(w/0.2) : 0) + ')');
+          } else if(k === 'refresh-cw'){
+            tf = 'rotate(' + fx(on ? 360*easeInOutCubic(w) : 0) + ' 12 12)';
           }
-          else if(k === 'refresh-cw') tf = 'rotate(' + fx(360*q) + ' 12 12)';
-          else { var sb = 1 + 0.05*(0.5 - 0.5*Math.cos(tw*q)); tf = 'translate(12 12) scale(' + sb.toFixed(3) + ') translate(-12 -12)'; }
-          if(tf) A.g.setAttribute('transform', tf);
+          if(breath !== 1) tf = 'translate(12 12) scale(' + breath.toFixed(3) + ') translate(-12 -12) ' + tf;
+          A.g.setAttribute('transform', tf);
         });
         // status card in pure ambient: a lit dot chases along the row, one step per AP/N
         if(s.ambientOnly && s.status){
@@ -1084,7 +1211,7 @@
       }
       Object.keys(s.nodeLit).forEach(function(id){ s.nodeLit[id].style.opacity = (nodeI[id] || 0).toFixed(3); });
       function put(c, pos){ c.setAttribute('cx', pos.x.toFixed(1)); c.setAttribute('cy', pos.y.toFixed(1)); }
-      var dashOff = s.amb ? -modf(t/s.AP*2, 1)*s.dashLen : -((t/s.dashPeriod) % 1) * s.dashLen;
+      var dashOff = s.amb ? -modf(t/s.AP*3, 1)*s.dashLen : -((t/s.dashPeriod) % 1) * s.dashLen;
       s.edges.forEach(function(E, k){
         E.lit.setAttribute('opacity', edgeI[k].toFixed(3));
         if(E.dashed) E.lit.setAttribute('stroke-dashoffset', dashOff.toFixed(2));
@@ -1141,7 +1268,7 @@
       var s = ctx.state;
       if(s && s.problems) pr = pr.concat(s.problems);
       var e = ctx.e;
-      var mo = e.motion || 'ambient', apc = Number(e.ambientPeriod) || 2.5;
+      var mo = e.motion || 'ambient', apc = Number(e.ambientPeriod) || 3.0;
       if(mo.indexOf('walk') >= 0 && mo.indexOf('ambient') >= 0){
         var per = Number(e.period) || 26, qq = per/apc;
         if(Math.abs(qq - Math.round(qq)) > 1e-6) pr.push('period '+per+' is not a whole multiple of ambientPeriod '+apc);

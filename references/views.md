@@ -208,30 +208,35 @@ Fonts: body text uses `TH.font` (CSS var `--font`). Titles/big numbers may use `
     smaller token rides `entry → first node` and the entry card glows weakly. Loop-backs that no
     round walks simply stay dim, so give each decision loop a round of its own.
   - motion: `motion` is `"ambient"` (default) | `"walk"` | `"ambient+walk"`; `ambientPeriod`
-    (default 2.5 s) is the ambient lap. Ambient makes the whole graph move at once: every forward edge
-    carries green packets (small tail, glow on dark) at one px/s speed, spaced so the lap closes
-    within `ambientPeriod`; every dashed loop-back marches its dashes forward (2 dash cycles per
-    lap, dim colour, no flicker); each icon has its own small motion (below); cards and group
-    frames stay still. The resident middle dot is dropped (the packets replace it). With a walk,
+    (default 3.0 s) is the ambient lap. Ambient makes the whole graph move at once: every forward edge
+    carries one or two big green packets (5-step path tail, SVG glow on dark) at one px/s speed,
+    spaced so the lap closes within `ambientPeriod`; every dashed loop-back marches its dashes
+    forward (3 dash cycles per lap, dim colour, no flicker) with one translucent warn dot riding it
+    once per lap; when a packet lands, the target node ripples (outline 0 -> 0.9 -> 0 while growing
+    6 px, card lifts 2 px, shadow deepens; >= 0.9 s bump, once per lap); each icon has its own
+    action window (below); card positions and group frames stay still. The resident middle dot is dropped (the packets replace it). With a walk,
     `period` must be a whole multiple of `ambientPeriod` (`check()` reports it) and the focus is
     quieter: outline 1.5x (no glow), token 0.8x. `verify_view.py` demands `canvas.duration` to be a
     whole multiple of `ambientPeriod` (pure ambient) or `period` (walk on).
     Status card (`status`): in pure ambient the big line is `status.ambientTitle`, the small line
     `status.ambientSub`, and the dot row is a chase (one dot every `ambientPeriod / dots`); with a
     walk it shows round / step as before.
-  - icon motion (ambient only, phase staggered by node order, one lap per `ambientPeriod`):
+  - icon motion (ambient only, phase staggered by node order `i*0.37`, one action window per
+    `ambientPeriod`, eased, still outside the window; every icon also breathes 1 -> 1.08 in step
+    with its window):
 
-    | icon | motion |
+    | icon | motion (window) |
     |---|---|
-    | message-square (drawn as Lucide `message-square-more`) | three dots hop in turn |
-    | eye | one blink per lap (scaleY 1 -> 0.15 -> 1, closed briefly) |
-    | ticket | wiggle +-6 deg |
-    | bug | sway +-5 deg |
-    | git-pull-request, git-merge | float +-1.5 px vertically |
-    | shield-check | breathe, scale 1 -> 1.08 |
-    | timer | hand ticks round the dial in 8 steps |
-    | refresh-cw | one full turn per lap |
-    | others (info, bot, bell, hand, circle) | breathe, scale 1 -> 1.05 |
+    | message-square (drawn as Lucide `message-square-more`) | three dots bounce 5 px in turn, easeOutBack, 0.12 lap apart (40%) |
+    | eye | full blink (scaleY 1 -> 0.1 -> 1, 0.25 s), then the pupil looks left/right +-2.5 px and recentres (40%) |
+    | ticket | wiggle +-12 deg, elastic settle (35%) |
+    | bug | crawl +-3 px with an +-8 deg head sway (40%) |
+    | git-pull-request, git-merge | float 7 px up with overshoot, ease back (default 35%) |
+    | shield-check | scale 1 -> 1.18 (easeOutBack), check re-drawn by stroke-dashoffset (45%) |
+    | timer | hand turns one full circle easeInOut, button presses 1.5 px (50%) |
+    | refresh-cw (status card) | one full easeInOut rotation (70%) |
+    | info and the rest | breathing only |
+
   - every marked node (text, edges, boxes) has a static style; focus, lit edges, tokens, dots and
     glow are separate unmarked elements whose opacity is the only thing `seek` changes.
 - **kpi**: `cards:[{label,value,unit?,delta?,series:[numbers],status?}]`, grid auto-chosen by count

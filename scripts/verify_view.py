@@ -125,7 +125,7 @@ def schema_check(cfg):
             # (ambientPeriod for motion "ambient", period when the walk is on)
             dur = (cfg.get("canvas") or {}).get("duration")
             motion = e.get("motion", "ambient")
-            amb = e.get("ambientPeriod", 2.5)
+            amb = e.get("ambientPeriod", 3.0)
             per = e.get("period", 26) if "walk" in str(motion) else amb
             name = "period" if "walk" in str(motion) else "ambientPeriod"
             if isinstance(dur, (int, float)) and isinstance(per, (int, float)) and per > 0:
