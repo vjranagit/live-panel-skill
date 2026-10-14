@@ -120,6 +120,14 @@ def schema_check(cfg):
                 msgs.append(f"{where}: ring needs 3..8 steps, got {n} — add \"steps\":[{{\"label\"}}] (split or merge until 3..8)")
         elif kind == "kpi":
             _nonempty_array(e, where, "cards", 'add "cards":[{"label","value","series":[...]}]', msgs)
+        elif kind == "loop":
+            # the loop closes on the video length: canvas.duration is a whole multiple of period
+            dur, per = (cfg.get("canvas") or {}).get("duration"), e.get("period", 26)
+            if isinstance(dur, (int, float)) and isinstance(per, (int, float)) and per > 0:
+                q = dur / per
+                if q < 1 or abs(q - round(q)) > 1e-6:
+                    msgs.append(f"{where}: canvas.duration={dur} is not a whole multiple of period={per} — "
+                                "the loop would not close; set duration = k * period")
     return msgs
 
 
