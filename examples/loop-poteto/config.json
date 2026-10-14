@@ -1,6 +1,6 @@
 {
  "meta": {
-  "title": "土豆的每日 Loop",
+  "title": "Grok Bot 负责人的每日 Loop",
   "lang": "zh"
  },
  "canvas": {
@@ -26,7 +26,7 @@
   {
    "type": "view",
    "kind": "loop",
-   "title": "土豆的每日 Loop",
+   "title": "Grok Bot 负责人的每日 Loop",
    "subtitle": "Grok Bot 管外环 · Cursor 管内环 · 人只在最后拍板",
    "period": 50,
    "cols": 4,
@@ -52,7 +52,7 @@
     },
     {
      "id": "gate",
-     "label": "人工闸门 · 土豆",
+     "label": "人工闸门 · 负责人",
      "sub": "human gate",
      "hue": "purple"
     }

@@ -179,12 +179,13 @@
       var hiddenEn = 0, totalEn = 0;
       function planCard(n, L, s){
         var isNote = n.type === 'note';
-        var tS = clamp(u*L.tS, 13, 20)*s, dS = clamp(u*L.dS, 11, 15.5)*s;
+        var tS = clamp(u*L.tS, 13, 20)*s, dS = clamp(u*L.dS, 11, 15.5)*s*(isNote ? 1.1 : 1);
         var pad = Math.round(u*(isNote ? 0.3 : 0.95)*s);
         var isize = n.icon != null ? Math.round(u*L.isz*(isNote ? 0.5 : 1)*s) : 0;
-        var tx0 = pad + (isize ? isize + Math.round(pad*(isNote ? 1.6 : 0.9)) : 0);
+        var dashW = isNote && n.desc.length > 1 ? Math.round(u*2.4) : 0;   // loop-back dash legend before each note line
+        var tx0 = pad + (isize ? isize + Math.round(pad*(isNote ? 1.6 : 0.9)) : 0) + dashW;
         var P = {n:n, isNote:isNote, isStatus:!!(statusCfg && statusCfg.node === n.id), tS:tS, dS:dS,
-                 tLh:Math.round(tS*1.6), dLh:Math.round(dS*1.55), pad:pad, isize:isize, tx0:tx0, tw:n.w - tx0 - pad - 2,
+                 tLh:Math.round(tS*1.6), dLh:Math.round(dS*(isNote ? 2.05 : 1.55)), dashW:dashW, pad:pad, isize:isize, tx0:tx0, tw:n.w - tx0 - pad - 2,
                  title:null, en:null, enMode:'none', desc:[], hidden:0, total:0, padV:Math.round(u*(isNote ? 0.35 : L.padV)*s)};
         var tw = P.tw;
         function fits(txt, px, room){ return ctx.measure(txt, px, ff, false) <= room; }
@@ -298,7 +299,7 @@
           var P = plans[n.id]; if(!P) return;
           if(P.title && mT < 1e9) P.title.size = Math.min(P.title.size, mT);
           if(P.en && mE < 1e9) P.en.size = Math.min(P.en.size, mE);
-          P.descSize = mD < 1e9 ? Math.min(P.dS, mD) : P.dS;
+          P.descSize = mD < 1e9 && !P.isNote ? Math.min(P.dS, mD) : P.dS;
         });
         return {L:L, plans:plans, cardRef:cardRef, dH:dH, rowCard:rowCard, rowNat:rowNat};
       }
@@ -529,22 +530,31 @@
 
       // ---- group titles: sit in the longest stretch of the title strip that no vertical edge crosses ----
       var obstacles = [];          // {l,t,r,b} rects labels must keep clear of
+      var textBoxes = [];          // text boxes every edge path must keep 1.5u away from
       groups.forEach(function(g){
         var b = gBlock[g.id];
         if(!b) return;
         var ty = b.top + Math.round(u*0.8);
         var sSz = Math.max(11, Math.round(gTitleSize*0.7));
-        var cuts = [];
+        // every edge piece that touches the strip blocks its x-range; the glow of a packet needs 2u either side
+        var clr = u*2.0, blocked = [];
         edges.forEach(function(E){
           for(var k = 0; k + 1 < E.pts.length; k++){
             var A = E.pts[k], B = E.pts[k+1];
-            if(Math.abs(A.x - B.x) < 1 && A.x > x0 + gp && A.x < x1 - gp && Math.min(A.y,B.y) < ty + gTitleLh && Math.max(A.y,B.y) > ty) cuts.push(A.x);
+            if(Math.min(A.y,B.y) < ty + gTitleLh + 2 && Math.max(A.y,B.y) > ty - 2){
+              var bl = Math.min(A.x,B.x) - clr, br = Math.max(A.x,B.x) + clr;
+              if(br > x0 + gp && bl < x1 - gp) blocked.push([bl, br]);
+            }
           }
         });
-        cuts.sort(function(m, n2){ return m - n2; });
+        blocked.sort(function(m, n2){ return m[0] - n2[0]; });
         var spans = [], cur = x0 + gp;
-        cuts.forEach(function(cx){ spans.push([cur, cx - u*1.0]); cur = cx + u*1.0; });
-        spans.push([cur, x1 - gp]);
+        blocked.forEach(function(bk){
+          if(bk[0] > cur) spans.push([cur, bk[0]]);
+          cur = Math.max(cur, bk[1]);
+        });
+        if(cur < x1 - gp) spans.push([cur, x1 - gp]);
+        if(!spans.length) spans.push([x0 + gp, x1 - gp]);
         var wantW = ctx.measure(g.label, gTitleSize, ff, true) + (g.sub ? ctx.measure(g.sub, sSz, ff, false) + u*1.0 : 0);
         var pick = null;
         spans.forEach(function(sp2){
@@ -564,6 +574,7 @@
           rEnd = tx + sw + u*1.0 + ctx.measure(fs.text, fs.size, ff, false);
         }
         obstacles.push({l:tx, t:ty, r:rEnd, b:ty + gTitleLh});
+        textBoxes.push({l:tx, t:ty, r:rEnd, b:ty + gTitleLh, what:'group title "'+g.id+'"'});
         // frame borders are obstacles too: labels must not straddle them
         obstacles.push({l:x0, t:b.top - 3, r:x1, b:b.top + 3});
         obstacles.push({l:x0, t:b.bottom - 3, r:x1, b:b.bottom + 3});
@@ -770,6 +781,28 @@
         if(cc.onLine) lab.style.cssText += 'width:'+lw+'px;text-align:center;background:'+ctx.cc('bg')+';transform:rotate(-90deg);';
         placed.push(pick.r);
         labelNodes.push(lab);
+        textBoxes.push({l:pick.r.l, t:pick.r.t, r:pick.r.r, b:pick.r.b, own:E, what:'label "'+E.label+'"'});
+      });
+      // clearance: no edge path (solid or dashed) comes closer than 1.5u to a text box; a label's own edge is exempt
+      function segRectDist(A, B, R){
+        var best = 1e9;
+        for(var q = 0; q <= 40; q++){
+          var px = A.x + (B.x - A.x)*q/40, py = A.y + (B.y - A.y)*q/40;
+          var dx = Math.max(R.l - px, 0, px - R.r), dy = Math.max(R.t - py, 0, py - R.b);
+          best = Math.min(best, Math.hypot(dx, dy));
+        }
+        return best;
+      }
+      textBoxes.forEach(function(T){
+        edges.forEach(function(E){
+          if(T.own === E) return;
+          for(var k = 0; k + 1 < E.pts.length; k++){
+            if(segRectDist(E.pts[k], E.pts[k+1], T) < u*1.5){
+              problems.push('edge '+E.cfg.from+'→'+E.cfg.to+' runs closer than 1.5u to '+T.what);
+              return;
+            }
+          }
+        });
       });
 
       // ---- nodes ----
@@ -964,6 +997,13 @@
             var df = ctx.fit(P.desc[di2], P.descSize, tw, ff, 11, false);
             var dn = el(null, 'position:absolute;left:'+tx0+'px;top:'+(dy0 + di2*dLh)+'px;height:'+dLh+'px;line-height:'+dLh+'px;'+ffCss+'font-size:'+df.size+'px;color:'+descC+';white-space:pre;');
             dn.textContent = df.text; ctx.mark(dn, 'text'); card.appendChild(dn);
+            if(P.dashW){
+              var dsv = svg('svg', {width:P.dashW, height:dLh});
+              dsv.style.cssText = 'position:absolute;left:'+(tx0 - P.dashW)+'px;top:'+(dy0 + di2*dLh)+'px;overflow:visible;';
+              dsv.appendChild(svg('line', {x1:1, y1:dLh/2, x2:P.dashW - Math.round(u*0.7), y2:dLh/2, stroke:warnCol, 'stroke-width':strokeW*1.2,
+                'stroke-linecap':'round', 'stroke-dasharray':Math.round(u*0.8)+' '+Math.round(u*0.5)}));
+              card.appendChild(dsv);
+            }
           }
           totalLines += P.total; hiddenLines += P.hidden;
         }
