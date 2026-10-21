@@ -1,0 +1,24 @@
+{
+  "title": "RESTAURANT KITCHEN · LIVE",
+  "titlebar": "~/kitchen/service",
+  "flow": [
+    [{"name": "TICKETS IN", "detail": "orders from POS", "log": ["table 12 · 4 covers"]}],
+    [{"name": "GRILL", "detail": "steaks + fish", "log": ["steak 2 · medium", "fish 1 · fired"]},
+     {"name": "FRY", "detail": "fries + sides", "log": ["fries x6 dropped"]},
+     {"name": "COLD", "detail": "salads + sweets", "log": ["salad x3 plated"]}],
+    [{"name": "PASS", "detail": "plates waiting", "gauge": "fill", "log": ["pass filling up"]}],
+    [{"name": "WAITERS", "detail": "run to tables", "log": ["table 12 served"]},
+     {"name": "REMAKE", "detail": "sent-back dishes", "alert": true, "log": ["steak back · overdone"]}]
+  ],
+  "side": {"name": "CHEF CALLS", "items": [
+    {"name": "ticket over 15 min", "row": 1, "advice": ["» chef jumps grill", "» hold new tickets"]},
+    {"name": "pass over 80%", "row": 2, "advice": ["» call all waiters", "» slow the stations"]},
+    {"name": "dish sent back", "row": 3, "advice": ["» remake first", "» re-fire to grill"]}
+  ]},
+  "counters": [
+    {"label": "covers", "start": 140, "rate": 0.5},
+    {"label": "open tickets", "start": 18, "rate": 0.1},
+    {"label": "remakes", "start": 3, "rate": 0.05}
+  ],
+  "note": "Illustrative kitchen · numbers illustrative"
+}
