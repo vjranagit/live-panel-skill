@@ -3,8 +3,8 @@
 # Any content problem prints one line starting with "FIX:"; edit content.json and rerun.
 set -euo pipefail
 SKILL_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-UPSTREAM_ROOT="$(cd -- "$SKILL_ROOT/.." && pwd)"
 CONTENT=${1:?usage: make.sh content.json out-dir}
+OUT=${2:?usage: make.sh content.json out-dir}
 CHROME=${CHROME:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v chrome || true)}
 [[ -n "$CHROME" ]] || CHROME="$HOME/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome"
 fail() { echo "FIX: $*" >&2; exit 2; }
