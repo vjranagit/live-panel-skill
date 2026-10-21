@@ -1,0 +1,26 @@
+{
+  "title": "ELEVATOR GROUP CONTROL · LIVE",
+  "titlebar": "~/tower/dispatch/30F-6cars",
+  "flow": [
+    [{"name": "CALLS IN", "detail": "dest. floor keys", "log": ["F12 · 3 riders", "F1 · 2 riders"]}],
+    [{"name": "DISPATCH", "detail": "assign 6 cars", "log": ["car 2 to F12", "car 5 to F27"]},
+     {"name": "UP-PEAK", "detail": "lobby surge AM", "log": ["armed 07:30", "4 cars up-biased"]},
+     {"name": "DOWN-PEAK", "detail": "top-floor PM", "log": ["watch 17:00-19:00"]}],
+    [{"name": "CARS 1-2", "detail": "bank A · 30F", "gauge": "pos 12", "log": ["car 1 · F12 stop"]},
+     {"name": "CARS 3-4", "detail": "bank B · 30F", "gauge": "pos 28", "log": ["car 3 · F27 stop"]},
+     {"name": "CARS 5-6", "detail": "bank C · 30F", "gauge": "pos 3", "log": ["car 5 · F3 stop"]}],
+    [{"name": "ARRIVAL", "detail": "doors at floor", "gauge": "load", "log": ["doors open · F12"]}]
+  ],
+  "side": {"name": "PEAK WATCH", "items": [
+    {"name": "up-peak surge", "row": 1, "advice": ["» hold cars at lobby", "» up-peak mode ON"]},
+    {"name": "down-peak surge", "row": 0, "advice": ["» release down pool", "» down-peak mode ON"]},
+    {"name": "car stuck > 20 s", "row": 2, "advice": ["» reassign call", "» rebalance load"]},
+    {"name": "call reassigned", "row": 1, "advice": ["» re-run dispatch", "» hold call 30 s"]}
+  ]},
+  "counters": [
+    {"label": "active calls", "start": 24, "rate": 0.35},
+    {"label": "avg wait (s)", "start": 38, "rate": 0.02},
+    {"label": "riders carried", "start": 1400, "rate": 1.2}
+  ],
+  "note": "30 floors · 6 cars · illustrative numbers"
+}
